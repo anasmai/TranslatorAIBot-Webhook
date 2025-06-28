@@ -209,7 +209,7 @@ if __name__ == '__main__':
     # Привязываем функции on_startup и on_shutdown к диспетчеру
     # Они будут вызваны aiogram при запуске/остановке веб-приложения
     dp.startup.register(on_startup)
-    dp.shutdown.register(on_shutdown)
+    # dp.shutdown.register(on_shutdown)
 
     # Создаем aiohttp приложение
     app = web.Application()
