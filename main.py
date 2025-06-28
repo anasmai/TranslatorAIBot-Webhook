@@ -11,6 +11,7 @@ from database import get_limit_data, set_limit_data
 # НОВЫЕ ИМПОРТЫ ДЛЯ ВЕБХУКОВ
 from aiogram.webhook.aiohttp_server import SimpleRequestHandler, setup_application
 from aiohttp import web
+
 # END НОВЫЕ ИМПОРТЫ
 
 load_dotenv()
@@ -18,17 +19,18 @@ load_dotenv()
 # --- КОНФИГУРАЦИЯ ДЛЯ ВЕБХУКОВ ---
 # Render автоматически предоставляет порт через переменную окружения PORT
 WEB_SERVER_HOST = "0.0.0.0"
-WEB_SERVER_PORT = int(os.getenv("PORT", 8080)) # Используем PORT, если есть, иначе 8080
-WEBHOOK_PATH = "/webhook" # Это путь, по которому Telegram будет отправлять обновления
+WEB_SERVER_PORT = int(os.getenv("PORT", 8080))  # Используем PORT, если есть, иначе 8080
+WEBHOOK_PATH = "/webhook"  # Это путь, по которому Telegram будет отправлять обновления
 # Render предоставит базовый URL вашего сервиса через переменную окружения WEBHOOK_URL.
 # На Render это обычно переменная SERVICE_URL или PUBLIC_URL.
 # Мы будем использовать WEBHOOK_URL для простоты, как мы ее назовем в Render.
 WEBHOOK_URL_BASE = os.getenv("WEBHOOK_URL")
-WEBHOOK_URL = f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}" # Полный URL для Telegram
+WEBHOOK_URL = f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}"  # Полный URL для Telegram
 
 # Рекомендуется использовать секретный токен для вебхуков для безопасности
 # Вы должны будете установить эту переменную окружения в Render.com
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "jKa1sBwF4pXzV7tR3qY9eC8nM2lD0hG4uI6oA") # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ СЕКРЕТНЫЙ ТОКЕН
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET",
+                           "jKa1sBwF4pXzV7tR3qY9eC8nM2lD0hG4uI6oA")  # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ СЕКРЕТНЫЙ ТОКЕН
 
 # Ваши API-ключи (используем тот же TELEGRAM_BOT_TOKEN для тестового бота)
 API_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
@@ -188,18 +190,24 @@ async def process_translate(callback: types.CallbackQuery):
 async def on_startup(dispatcher: Dispatcher, bot: Bot) -> None:
     # Установка вебхука при старте приложения
     # Сначала удалим старый вебхук (если он был), чтобы избежать конфликтов
-    await bot.delete_webhook(drop_pending_updates=True) # Удаляем старый и все ожидающие обновления
+    await bot.delete_webhook(drop_pending_updates=True)  # Удаляем старый и все ожидающие обновления
     await bot.set_webhook(
         WEBHOOK_URL,
         secret_token=WEBHOOK_SECRET,
-        drop_pending_updates=True # Также очистим ожидающие обновления при установке нового вебхука
+        drop_pending_updates=True  # Также очистим ожидающие обновления при установке нового вебхука
     )
     logging.info(f"Webhook set to: {WEBHOOK_URL}")
 
+
 async def on_shutdown(dispatcher: Dispatcher, bot: Bot) -> None:
-    # Удаление вебхука при завершении работы приложения
-    await bot.delete_webhook()
-    logging.info("Webhook deleted.")
+    # УДАЛЯТЬ ВЕБХУК ПРИ ЗАВЕРШЕНИИ РАБОТЫ НЕ НУЖНО НА RENDER БЕСПЛАТНОГО ТИПА
+    # Так как Render сам "убивает" процесс, и удаление вебхука мешает авто-пробуждению.
+    # Поэтому мы закомментируем или удалим эту строку:
+    # await bot.delete_webhook() # Закомментировано
+    logging.info(
+        "Webhook deleted. (This message might still appear if the bot exits forcefully, but the webhook is not explicitly deleted by our code)")
+
+
 # END НОВЫЕ ФУНКЦИИ ЗАПУСКА
 
 # --- ИЗМЕНЕННЫЙ ГЛАВНЫЙ БЛОК ЗАПУСКА ---
@@ -207,15 +215,13 @@ if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
 
     # Привязываем функции on_startup и on_shutdown к диспетчеру
-    # Они будут вызваны aiogram при запуске/остановке веб-приложения
     dp.startup.register(on_startup)
-    # dp.shutdown.register(on_shutdown)
+    # dp.shutdown.register(on_shutdown) # <-- ЭТУ СТРОКУ КОММЕНТИРУЕМ ИЛИ УДАЛЯЕМ!
 
     # Создаем aiohttp приложение
     app = web.Application()
 
     # Создаем обработчик запросов для вебхука aiogram
-    # Path - это путь, по которому Telegram будет отправлять обновления
     webhook_requests_handler = SimpleRequestHandler(
         dispatcher=dp,
         bot=bot,
@@ -224,9 +230,31 @@ if __name__ == '__main__':
     webhook_requests_handler.register(app, path=WEBHOOK_PATH)
 
     # Привязываем диспетчер aiogram к aiohttp приложению
-    # Это позволяет aiogram управлять жизненным циклом бота через веб-приложение
     setup_application(app, dp, bot=bot)
 
-    # Запускаем веб-сервер aiohttp
     logging.info(f"Starting web server on {WEB_SERVER_HOST}:{WEB_SERVER_PORT}")
-    web.run_app(app, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+
+
+    # --- ЭТОТ НОВЫЙ БЛОК КОДА ЗАПУСКА ЗАМЕНЯЕТ web.run_app(...) ---
+    async def main_run():
+        """
+        Основная функция для запуска веб-сервера aiohttp и поддержания его работы.
+        Используется asyncio.run для явного управления асинхронным циклом
+        и asyncio.sleep для предотвращения самопроизвольного завершения процесса,
+        пока Render не "усыпит" его из-за бездействия.
+        """
+        runner = web.AppRunner(app)
+        await runner.setup()
+        site = web.TCPSite(runner, host=WEB_SERVER_HOST, port=WEB_SERVER_PORT)
+        await site.start()
+
+        # Этот бесконечный цикл гарантирует, что основной асинхронный поток не завершится.
+        # Render будет "убивать" процесс сам, когда наступит 15 минут неактивности.
+        # 3600 секунд (1 час) - это просто большое число, чтобы цикл не завершался сам.
+        while True:
+            await asyncio.sleep(3600)
+
+            # Запускаем асинхронную функцию main_run
+
+
+    asyncio.run(main_run())
