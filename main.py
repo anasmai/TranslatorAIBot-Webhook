@@ -28,7 +28,7 @@ WEBHOOK_URL = f"{WEBHOOK_URL_BASE}{WEBHOOK_PATH}" # Полный URL для Tele
 
 # Рекомендуется использовать секретный токен для вебхуков для безопасности
 # Вы должны будете установить эту переменную окружения в Render.com
-WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "ваш_очень_секретный_токен") # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ СЕКРЕТНЫЙ ТОКЕН
+WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "jKa1sBwF4pXzV7tR3qY9eC8nM2lD0hG4uI6oA") # ЗАМЕНИТЕ НА РЕАЛЬНЫЙ СЕКРЕТНЫЙ ТОКЕН
 
 # Ваши API-ключи (используем тот же TELEGRAM_BOT_TOKEN для тестового бота)
 API_TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
