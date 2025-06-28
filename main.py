@@ -18,7 +18,7 @@ load_dotenv()
 # --- КОНФИГУРАЦИЯ ДЛЯ ВЕБХУКОВ ---
 # Render автоматически предоставляет порт через переменную окружения PORT
 WEB_SERVER_HOST = "0.0.0.0"
-WEB_SERVER_PORT = os.getenv("PORT", 8080) # Используем PORT, если есть, иначе 8080
+WEB_SERVER_PORT = int(os.getenv("PORT", 8080)) # Используем PORT, если есть, иначе 8080
 WEBHOOK_PATH = "/webhook" # Это путь, по которому Telegram будет отправлять обновления
 # Render предоставит базовый URL вашего сервиса через переменную окружения WEBHOOK_URL.
 # На Render это обычно переменная SERVICE_URL или PUBLIC_URL.
